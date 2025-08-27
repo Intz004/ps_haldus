@@ -1,35 +1,39 @@
-# Küsi kasutajalt ees- ja perenimi
-$eesnimi = Read-Host "Sisesta oma eesnimi (ainult ladina tähed)"
-$perenimi = Read-Host "Sisesta oma perenimi (ainult ladina tähed)"
+# Lae AD moodul (vajalik, kui pole automaatselt laetud)
+Import-Module ActiveDirectory
 
-# Loo kasutajanimi kujul ees.perenimi ja teisenda väiketähtedeks
+# Küsi ees- ja perenimi
+$eesnimi = Read-Host "Sisesta kasutaja eesnimi"
+$perenimi = Read-Host "Sisesta kasutaja perenimi"
+
+# Loo kasutajanimi kujul ees.perenimi
 $kasutajanimi = ("{0}.{1}" -f $eesnimi, $perenimi).ToLower()
 $taisnimi = "$eesnimi $perenimi"
-$kirjeldus = "Kohalik kasutaja: $taisnimi"
 
-Write-Host "Loodav kasutaja: $kasutajanimi"
-Write-Host "Täisnimi: $taisnimi"
-Write-Host "Kirjeldus: $kirjeldus"
+# Kontrolli, kas kasutaja on juba AD-s olemas
+$adkasutaja = Get-ADUser -Filter {SamAccountName -eq $kasutajanimi} -ErrorAction SilentlyContinue
 
-# Kontrolli, kas kasutaja juba eksisteerib
-$olemasolev = Get-LocalUser -Name $kasutajanimi -ErrorAction SilentlyContinue
-
-if ($null -ne $olemasolev) {
-    Write-Host "Kasutaja '$kasutajanimi' on süsteemis juba olemas. Loomist ei toimu."
+if ($null -ne $adkasutaja) {
+    Write-Host "AD kasutaja '$kasutajanimi' on juba olemas."
 }
 else {
-    # Määra vaikeparool
+    # Parool
     $parool = ConvertTo-SecureString "Parool1!" -AsPlainText -Force
 
     Try {
-        # Proovi luua uus kasutaja
-        New-LocalUser -Name $kasutajanimi -Password $parool -FullName $taisnimi -Description $kirjeldus -ErrorAction Stop
-        if ($?) {
-            Write-Host "Kasutaja '$kasutajanimi' on edukalt loodud!"
-        }
+        # Loo uus AD kasutaja
+        New-ADUser -SamAccountName $kasutajanimi `
+                   -UserPrincipalName "$kasutajanimi@domeen.local" `  # <- muuda oma domeeni järgi!
+                   -Name $taisnimi `
+                   -GivenName $eesnimi `
+                   -Surname $perenimi `
+                   -Description "AD kasutaja: $taisnimi" `
+                   -AccountPassword $parool `
+                   -Enabled $true -ErrorAction Stop
+
+        Write-Host "AD kasutaja '$kasutajanimi' edukalt loodud!"
     }
     Catch {
-        Write-Host "Kasutaja loomine ebaõnnestus."
+        Write-Host "AD kasutaja loomine ebaõnnestus."
         Write-Host "Veateade: $($_.Exception.Message)"
     }
 }
